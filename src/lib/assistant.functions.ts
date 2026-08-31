@@ -51,7 +51,7 @@ const researchSchema = z.object({
 function getGateway() {
   const key = process.env["LOVABLE_API_KEY"];
   if (!key) throw new Error("AI is not configured for this app.");
-  return createLovableAiGatewayProvider(key);
+  return createLovableAiGatewayProvider(key, undefined, { structuredOutputs: true });
 }
 
 function gatewayError(error: unknown): never {
@@ -69,7 +69,7 @@ function gatewayError(error: unknown): never {
 }
 
 export const generateSchedule = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => PlannerInput.parse(input))
+  .validator((input: unknown) => PlannerInput.parse(input))
   .handler(async ({ data }) => {
     const gateway = getGateway();
     const taskList = data.tasks
@@ -106,7 +106,7 @@ export const generateSchedule = createServerFn({ method: "POST" })
   });
 
 export const generateResearch = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => ResearchInput.parse(input))
+  .validator((input: unknown) => ResearchInput.parse(input))
   .handler(async ({ data }) => {
     const gateway = getGateway();
 
