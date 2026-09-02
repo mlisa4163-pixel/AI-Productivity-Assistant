@@ -19,7 +19,9 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { VoiceInputButton } from "@/components/voice-input-button";
 import { Button } from "@/components/ui/button";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useSession } from "@/lib/session-store";
 
 export const Route = createFileRoute("/chat")({
@@ -51,6 +53,9 @@ const SUGGESTIONS = [
 function Chat() {
   const { tone, chatDraft, setChatDraft } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const voice = useVoiceInput((text) =>
+    setChatDraft(chatDraft.trim() ? `${chatDraft.trim()} ${text}` : text),
+  );
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
@@ -96,9 +101,9 @@ function Chat() {
           </Conversation>
         </div>
 
-        {error ? (
+        {error || voice.error ? (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-            {error}
+            {error ?? voice.error}
           </p>
         ) : null}
 
@@ -129,7 +134,17 @@ function Chat() {
               onChange={(event) => setChatDraft(event.target.value)}
               placeholder="Ask about planning, writing, research or decisions…"
             />
-            <PromptInputFooter className="justify-end">
+            <PromptInputFooter className="justify-between">
+              <div className="flex items-center gap-2">
+                <VoiceInputButton state={voice.state} onToggle={voice.toggle} />
+                <span className="text-xs text-muted-foreground">
+                  {voice.state === "recording"
+                    ? "Recording…"
+                    : voice.state === "transcribing"
+                      ? "Transcribing…"
+                      : "Speak your message"}
+                </span>
+              </div>
               <PromptInputSubmit status={status} disabled={!chatDraft.trim() && !isBusy} />
             </PromptInputFooter>
           </PromptInput>

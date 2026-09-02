@@ -36,9 +36,21 @@ const scheduleSchema = z.object({
   ),
 });
 
+const AttachmentSchema = z.object({
+  name: z.string(),
+  mediaType: z.string(),
+  data: z.string(),
+});
+
 const ResearchInput = z.object({
   topic: z.string(),
   tone: z.string(),
+  attachments: z.array(AttachmentSchema).optional(),
+});
+
+const TranscribeInput = z.object({
+  mediaType: z.string(),
+  data: z.string(),
 });
 
 const researchSchema = z.object({
@@ -110,6 +122,8 @@ export const generateResearch = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const gateway = getGateway();
 
+    const attachments = data.attachments ?? [];
+
     try {
       const result = streamText({
         model: gateway(MODEL),
@@ -118,13 +132,29 @@ export const generateResearch = createServerFn({ method: "POST" })
           "You are a workplace research assistant. Analyse the input and respond in clear business English. " +
           "Never fabricate statistics, sources or quotes; flag where verification is needed. " +
           (toneGuidance[data.tone] ?? ""),
-        prompt: [
-          "Analyse the following topic, question or article text.",
-          "Return: a summary paragraph, key insights, risks or limitations, and recommended next actions.",
-          "Aim for 3-6 items in each list. Plain text only, no markdown bullets or numbering.",
-          "",
-          data.topic,
-        ].join("\n"),
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text" as const,
+                text: [
+                  "Analyse the following topic, question or article text, together with any attached files.",
+                  "Return: a summary paragraph, key insights, risks or limitations, and recommended next actions.",
+                  "Aim for 3-6 items in each list. Plain text only, no markdown bullets or numbering.",
+                  "",
+                  data.topic || "(no text provided — base the analysis on the attached files)",
+                ].join("\n"),
+              },
+              ...attachments.map((file) => ({
+                type: "file" as const,
+                mediaType: file.mediaType,
+                filename: file.name,
+                data: file.data,
+              })),
+            ],
+          },
+        ],
       });
 
       return await result.output;
@@ -132,6 +162,34 @@ export const generateResearch = createServerFn({ method: "POST" })
       if (NoObjectGeneratedError.isInstance(error)) {
         throw new Error("The AI response could not be read as research output. Please try again.");
       }
+      gatewayError(error);
+    }
+  });
+
+export const transcribeAudio = createServerFn({ method: "POST" })
+  .validator((input: unknown) => TranscribeInput.parse(input))
+  .handler(async ({ data }) => {
+    const gateway = getGateway();
+
+    try {
+      const result = streamText({
+        model: gateway(MODEL),
+        system:
+          "You transcribe workplace voice notes. Return only the transcription as plain text, " +
+          "with sensible punctuation and no commentary, labels or quotation marks.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text" as const, text: "Transcribe this audio recording." },
+              { type: "file" as const, mediaType: data.mediaType, data: data.data },
+            ],
+          },
+        ],
+      });
+
+      return { text: (await result.text).trim() };
+    } catch (error) {
       gatewayError(error);
     }
   });
