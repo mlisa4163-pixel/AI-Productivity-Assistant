@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Copy, Sparkle } from "lucide-react";
-import { useState } from "react";
+import { Check, Copy, Paperclip, Sparkle, X } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { AiDisclaimer } from "@/components/ai-disclaimer";
 import { AppShell } from "@/components/app-shell";
+import { VoiceInputButton } from "@/components/voice-input-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 import { generateResearch } from "@/lib/assistant.functions";
 import { useSession } from "@/lib/session-store";
 
@@ -48,15 +50,69 @@ const SECTIONS: { key: keyof ResearchOutput; label: string; hint: string }[] = [
   { key: "recommendations", label: "Recommendations", hint: "Suggested next actions" },
 ];
 
+type Attachment = { id: string; name: string; mediaType: string; data: string };
+
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
+
+const ACCEPTED =
+  ".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.webp,text/plain,text/markdown,text/csv,application/json,application/pdf,image/*";
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function Research() {
   const { tone, bumpResearchCount } = useSession();
   const [topic, setTopic] = useState("");
   const [output, setOutput] = useState<ResearchOutput>(EMPTY);
   const [copied, setCopied] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const voice = useVoiceInput((text) =>
+    setTopic((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text)),
+  );
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setFileError(null);
+    const next: Attachment[] = [];
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_BYTES) {
+        setFileError(`${file.name} is larger than 8 MB and was skipped.`);
+        continue;
+      }
+      next.push({
+        id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mediaType: file.type || "application/octet-stream",
+        data: await fileToBase64(file),
+      });
+    }
+    if (next.length) setAttachments((prev) => [...prev, ...next]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const runResearch = useServerFn(generateResearch);
   const mutation = useMutation({
-    mutationFn: () => runResearch({ data: { topic: topic.trim(), tone } }),
+    mutationFn: () =>
+      runResearch({
+        data: {
+          topic: topic.trim(),
+          tone,
+          attachments: attachments.map(({ name, mediaType, data }) => ({ name, mediaType, data })),
+        },
+      }),
+
     onSuccess: (result) => {
       setOutput({
         summary: result?.summary ?? "",
@@ -83,12 +139,24 @@ function Research() {
           <CardHeader>
             <CardTitle className="text-base">What should I look into?</CardTitle>
             <CardDescription>
-              Enter a topic, a question, or paste article text to analyse.
+              Type or dictate a topic, paste article text, or attach documents and images.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="research-input">Topic, question or article text</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="research-input">Topic, question or article text</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {voice.state === "recording"
+                      ? "Recording…"
+                      : voice.state === "transcribing"
+                        ? "Transcribing…"
+                        : "Dictate"}
+                  </span>
+                  <VoiceInputButton state={voice.state} onToggle={voice.toggle} />
+                </div>
+              </div>
               <Textarea
                 id="research-input"
                 value={topic}
@@ -96,9 +164,63 @@ function Research() {
                 placeholder="e.g. What should we consider before moving our support team to a four-day week?"
                 className="min-h-40"
               />
+              {voice.error ? (
+                <p className="text-xs text-destructive">{voice.error}</p>
+              ) : null}
             </div>
+
+            <div className="space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED}
+                className="sr-only"
+                aria-label="Attach files"
+                onChange={(event) => void addFiles(event.target.files)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip /> Attach files
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Text, Markdown, CSV, JSON, PDF or images, up to 8 MB each. Files are sent only for
+                this analysis and are never stored.
+              </p>
+              {fileError ? <p className="text-xs text-destructive">{fileError}</p> : null}
+              {attachments.length ? (
+                <ul className="flex flex-wrap gap-2">
+                  {attachments.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs"
+                    >
+                      <span className="max-w-48 truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${file.name}`}
+                        className="text-muted-foreground transition-colors hover:text-destructive"
+                        onClick={() =>
+                          setAttachments((prev) => prev.filter((item) => item.id !== file.id))
+                        }
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
             <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={() => mutation.mutate()} disabled={!topic.trim() || mutation.isPending}>
+              <Button
+                onClick={() => mutation.mutate()}
+                disabled={(!topic.trim() && attachments.length === 0) || mutation.isPending}
+              >
                 <Sparkle /> {mutation.isPending ? "Analysing…" : "Analyse"}
               </Button>
               <span className="text-xs text-muted-foreground">
