@@ -112,10 +112,8 @@ export function useVoiceInput(onTranscript: (text: string) => void) {
 
       setState("transcribing");
       try {
-        const data = await blobToBase64(blob);
-        const result = await transcribeAudio({
-          data: { mediaType: (recorder.mimeType || "audio/webm").split(";")[0], data },
-        });
+        const data = await blobToWavBase64(blob);
+        const result = await transcribeAudio({ data: { mediaType: "audio/wav", data } });
         if (result?.text) onTranscript(result.text);
         else setError("No speech was detected in that recording.");
       } catch (transcribeError) {
