@@ -1,86 +1,110 @@
-# Workplace AI Companion
+# AI Workplace Productivity Assistant
 
-Build a modern, responsive SaaS-style web app called **AI Workplace Productivity Assistant**.
+## Project Overview
 
-Create a clean professional dashboard with a sidebar containing:
+**AI Workplace Productivity Assistant** is a modern, responsive web application designed to help professionals improve workplace productivity using AI.
 
-* Dashboard
-* AI Task Planner
-* AI Research Assistant
-* AI Chatbot
-* Prompt Library
-* Settings
+The application combines task planning, research assistance, and an AI chatbot into one simple SaaS-style dashboard. It is designed as a **frontend-only application** and does not use a database or backend for persistent data storage.
 
-### Core features
+## Features Implemented
 
-**1. AI Task Planner**
+### 📋 AI Task Planner
 
-* User enters tasks, priorities and deadlines.
-* Generate a daily/weekly schedule.
-* Allow users to edit generated schedules.
-* Include task priorities: High, Medium, Low.
+* Create and organise workplace tasks.
+* Set task priorities and deadlines.
+* Generate daily or weekly schedules.
+* Edit AI-generated schedules.
+* Prioritise tasks based on urgency and importance.
 
-**2. AI Research Assistant**
+### 🔎 AI Research Assistant
 
-* User enters a topic, question or article text.
-* Generate a clear summary, key insights, risks and recommendations.
-* Allow AI output to be edited.
+* Enter a research topic or question.
+* Generate summaries and key insights.
+* Identify potential risks and recommendations.
+* Edit AI-generated research results.
 
-**3. AI Chatbot**
+### 💬 AI Chatbot
 
-* Professional workplace-style chat interface.
-* Include suggested prompts.
-* Allow users to send prompts and receive AI responses.
+* Interactive workplace AI assistant.
+* Send workplace-related prompts.
+* Receive AI-generated responses.
+* Includes suggested prompts for common workplace tasks.
 
-**4. Prompt Library**
-Include ready-to-use prompts for:
+### 📚 Prompt Library
+
+Ready-to-use prompts for:
 
 * Daily planning
 * Meeting preparation
 * Email improvement
 * Research
 * Problem solving
-* Weekly review
+* Weekly reviews
 
-### Design
+### 🎨 User Interface
 
-Use a modern, minimal SaaS design with:
+* Modern SaaS-style dashboard.
+* Responsive design for desktop and mobile.
+* Sidebar navigation.
+* Clean cards, forms and input fields.
+* Editable AI outputs.
+* Responsible AI disclaimer.
 
-* Responsive desktop and mobile layouts
-* Sidebar navigation
-* Cards and clean dashboard sections
-* Professional typography
-* Clear buttons and input fields
-* Light, professional interface
-* Good spacing and accessibility
+## Technologies and Tools Used
 
-### Important technical requirement
+* **React** – Frontend user interface
+* **JavaScript/TypeScript** – Application functionality
+* **HTML & CSS** – Structure and styling
+* **Tailwind CSS** – Responsive and modern UI styling
+* **Lovable** – AI-assisted application development
+* **GitHub** – Source code management and project hosting
 
-**Do NOT create or use a database, backend, authentication system, user accounts, Supabase, or persistent data storage.**
+### Data Storage
 
-The application should be a **frontend-only prototype**. Use temporary in-memory/local state only where necessary. Data can reset when the page is refreshed.
+This project does **not** use a database or backend.
 
-Include a small **Responsible AI disclaimer** stating that AI outputs may contain errors and should be reviewed before being used for important workplace decisions.
+User inputs and application data are handled temporarily on the frontend. Data may be lost when the page is refreshed or the application is closed.
 
-Keep the application simple, polished and functional. Prioritise the three main AI features over unnecessary functionality.
+## Setup Instructions
 
-This project was built with [Lovable](https://lovable.dev).
+### 1. Clone the repository
 
-## Build with Lovable
+```bash
+git clone https://github.com/YOUR-USERNAME/ai-workplace-productivity-assistant.git
+```
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/cbd2e0d8-7d91-4913-9116-e5471e535b99).
+### 2. Open the project
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+```bash
+cd ai-workplace-productivity-assistant
+```
 
-## Development
+### 3. Install dependencies
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+```bash
+npm install
+```
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+### 4. Start the development server
+
+```bash
 npm run dev
 ```
+
+### 5. Open the application
+
+Open the local development URL provided by Vite, normally:
+
+```text
+http://localhost:5173
+```
+
+## Responsible AI Disclaimer
+
+The AI Workplace Productivity Assistant is intended to support workplace productivity and should not replace human judgement.
+
+AI-generated information may contain errors or inaccurate recommendations. Users should review and verify important AI-generated content before using it for significant workplace, financial, legal, compliance or other high-impact decisions.
+
+## Project Purpose
+
+This project demonstrates how AI can be incorporated into a modern workplace productivity application to assist users with **planning, research, communication and decision support** while keeping the application simple and easy to use.
