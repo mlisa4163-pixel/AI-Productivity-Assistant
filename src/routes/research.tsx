@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Copy, Paperclip, Sparkle, X } from "lucide-react";
+import { Check, Copy, Paperclip, Sparkle, Video, X } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { AiDisclaimer } from "@/components/ai-disclaimer";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useVoiceInput } from "@/hooks/use-voice-input";
-import { generateResearch } from "@/lib/assistant.functions";
+import { generateResearch, transcribeVideo } from "@/lib/assistant.functions";
 import { useSession } from "@/lib/session-store";
 
 export const Route = createFileRoute("/research")({
@@ -53,6 +53,8 @@ const SECTIONS: { key: keyof ResearchOutput; label: string; hint: string }[] = [
 type Attachment = { id: string; name: string; mediaType: string; data: string };
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+
+const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
 
 const ACCEPTED =
   ".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.webp,text/plain,text/markdown,text/csv,application/json,application/pdf,image/*";
@@ -100,6 +102,42 @@ function Research() {
     }
     if (next.length) setAttachments((prev) => [...prev, ...next]);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [videoState, setVideoState] = useState<"idle" | "transcribing">("idle");
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoName, setVideoName] = useState<string | null>(null);
+  const runTranscribeVideo = useServerFn(transcribeVideo);
+
+  const addVideo = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setVideoError(null);
+    if (file.size > MAX_VIDEO_BYTES) {
+      setVideoError(`${file.name} is larger than 20 MB. Try a shorter clip.`);
+      return;
+    }
+    setVideoName(file.name);
+    setVideoState("transcribing");
+    try {
+      const data = await fileToBase64(file);
+      const result = await runTranscribeVideo({
+        data: { mediaType: file.type || "video/mp4", data },
+      });
+      if (result?.text) {
+        setTopic((prev) => (prev.trim() ? `${prev.trim()}\n\n${result.text}` : result.text));
+      } else {
+        setVideoError("No speech was detected in that video.");
+      }
+    } catch (error) {
+      setVideoError(
+        error instanceof Error ? error.message : "Could not transcribe that video.",
+      );
+    } finally {
+      setVideoState("idle");
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
   };
 
   const runResearch = useServerFn(generateResearch);
@@ -214,6 +252,40 @@ function Research() {
                   ))}
                 </ul>
               ) : null}
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
+              <p className="text-sm font-medium">Voice notes &amp; video</p>
+              <p className="text-xs text-muted-foreground">
+                Dictate a voice note with the microphone above, or upload a video and its spoken
+                content is transcribed into the box for analysis.
+              </p>
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                className="sr-only"
+                aria-label="Upload a video"
+                onChange={(event) => void addVideo(event.target.files)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={videoState === "transcribing"}
+                  onClick={() => videoInputRef.current?.click()}
+                >
+                  <Video /> {videoState === "transcribing" ? "Transcribing video…" : "Upload video"}
+                </Button>
+                {videoName ? (
+                  <span className="max-w-56 truncate text-xs text-muted-foreground">
+                    {videoName}
+                  </span>
+                ) : null}
+                <span className="text-xs text-muted-foreground">MP4, WebM or MOV up to 20 MB.</span>
+              </div>
+              {videoError ? <p className="text-xs text-destructive">{videoError}</p> : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-3">

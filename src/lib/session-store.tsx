@@ -2,11 +2,20 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 
 export type Priority = "High" | "Medium" | "Low";
 
+export type MeetingMode = "Online" | "Face to face";
+
 export type Task = {
   id: string;
   title: string;
   priority: Priority;
   deadline: string;
+  /** Start time, "HH:MM". */
+  time: string;
+  /** Duration in minutes. */
+  duration: number;
+  mode: MeetingMode;
+  /** Minutes before the start time to remind, or 0 for no reminder. */
+  reminder: number;
 };
 
 export type ScheduleBlock = {
@@ -14,6 +23,8 @@ export type ScheduleBlock = {
   time: string;
   activity: string;
   priority: Priority;
+  duration: number;
+  mode: MeetingMode;
   notes: string;
 };
 
