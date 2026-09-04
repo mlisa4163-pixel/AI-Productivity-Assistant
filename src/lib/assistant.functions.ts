@@ -20,6 +20,9 @@ const PlannerInput = z.object({
       title: z.string(),
       priority: z.string(),
       deadline: z.string(),
+      time: z.string(),
+      duration: z.number(),
+      mode: z.string(),
     }),
   ),
 });
@@ -31,6 +34,8 @@ const scheduleSchema = z.object({
       time: z.string(),
       activity: z.string(),
       priority: z.string(),
+      duration: z.number(),
+      mode: z.string(),
       notes: z.string(),
     }),
   ),
@@ -49,6 +54,11 @@ const ResearchInput = z.object({
 });
 
 const TranscribeInput = z.object({
+  mediaType: z.string(),
+  data: z.string(),
+});
+
+const TranscribeVideoInput = z.object({
   mediaType: z.string(),
   data: z.string(),
 });
@@ -85,7 +95,12 @@ export const generateSchedule = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const gateway = getGateway();
     const taskList = data.tasks
-      .map((task) => `- ${task.title} (priority: ${task.priority}, due: ${task.deadline || "n/a"})`)
+      .map(
+        (task) =>
+          `- ${task.title} (priority: ${task.priority}, due: ${task.deadline || "n/a"}, ` +
+          `preferred start: ${task.time || "flexible"}, duration: ${task.duration} min, ` +
+          `format: ${task.mode})`,
+      )
       .join("\n");
 
     try {
@@ -104,6 +119,9 @@ export const generateSchedule = createServerFn({ method: "POST" })
             ? "Use clock time ranges within a normal workday, e.g. '09:00 - 10:30'. Aim for 6-9 blocks."
             : "Use day labels with a time hint, e.g. 'Monday morning'. Aim for 8-12 blocks across Monday to Friday.",
           "priority must be exactly one of: High, Medium, Low.",
+          "duration: length of the block in whole minutes (integer).",
+          "mode must be exactly one of: Online, Face to face. Respect each task's stated format; use Online for solo/focus work.",
+          "Respect any preferred start time and duration given for a task.",
           "notes: one short sentence of guidance. Keep every field plain text with no markdown.",
         ].join("\n"),
       });
@@ -192,4 +210,56 @@ export const transcribeAudio = createServerFn({ method: "POST" })
     } catch (error) {
       gatewayError(error);
     }
+  });
+
+/**
+ * Transcribes a video's spoken content. Video input must be sent as a
+ * `video_url` block on the chat-completions endpoint, so this calls the
+ * gateway directly instead of going through the AI SDK.
+ */
+export const transcribeVideo = createServerFn({ method: "POST" })
+  .validator((input: unknown) => TranscribeVideoInput.parse(input))
+  .handler(async ({ data }) => {
+    const key = process.env["LOVABLE_API_KEY"];
+    if (!key) throw new Error("AI is not configured for this app.");
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Lovable-API-Key": key,
+        "X-Lovable-AIG-SDK": "fetch",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You transcribe workplace video recordings. Return only the spoken content as " +
+              "plain text with sensible punctuation, and no commentary or labels.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Transcribe the speech in this video." },
+              {
+                type: "video_url",
+                video_url: { url: `data:${data.mediaType};base64,${data.data}` },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      gatewayError(new Error(`${response.status} ${detail.slice(0, 300)}`));
+    }
+
+    const payload = (await response.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    return { text: (payload.choices?.[0]?.message?.content ?? "").trim() };
   });

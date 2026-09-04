@@ -1,7 +1,8 @@
 import { useChat } from "@ai-sdk/react";
 import { createFileRoute } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
-import { useState } from "react";
+import { Paperclip, X } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { AiDisclaimer } from "@/components/ai-disclaimer";
 import { AppShell } from "@/components/app-shell";
@@ -50,9 +51,47 @@ const SUGGESTIONS = [
   "What questions should I ask before agreeing to this deadline?",
 ];
 
+type ChatFile = { id: string; name: string; mediaType: string; url: string };
+
+const MAX_CHAT_FILE_BYTES = 8 * 1024 * 1024;
+
+const CHAT_ACCEPTED =
+  ".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.webp,text/plain,text/markdown,text/csv,application/json,application/pdf,image/*";
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function Chat() {
   const { tone, chatDraft, setChatDraft } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<ChatFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = async (list: FileList | null) => {
+    if (!list?.length) return;
+    setError(null);
+    const next: ChatFile[] = [];
+    for (const file of Array.from(list)) {
+      if (file.size > MAX_CHAT_FILE_BYTES) {
+        setError(`${file.name} is larger than 8 MB and was skipped.`);
+        continue;
+      }
+      next.push({
+        id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        mediaType: file.type || "application/octet-stream",
+        url: await fileToDataUrl(file),
+      });
+    }
+    if (next.length) setFiles((prev) => [...prev, ...next]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
   const voice = useVoiceInput((text) =>
     setChatDraft(chatDraft.trim() ? `${chatDraft.trim()} ${text}` : text),
   );
@@ -65,10 +104,22 @@ function Chat() {
   const isBusy = status === "submitted" || status === "streaming";
 
   const send = (text: string) => {
-    if (!text.trim() || isBusy) return;
+    if ((!text.trim() && files.length === 0) || isBusy) return;
     setError(null);
-    void sendMessage({ text: text.trim() }, { body: { tone } });
+    void sendMessage(
+      {
+        text: text.trim(),
+        files: files.map((file) => ({
+          type: "file" as const,
+          mediaType: file.mediaType,
+          filename: file.name,
+          url: file.url,
+        })),
+      },
+      { body: { tone } },
+    );
     setChatDraft("");
+    setFiles([]);
   };
 
   return (
@@ -89,6 +140,10 @@ function Chat() {
                       {message.parts.map((part, index) =>
                         part.type === "text" ? (
                           <MessageResponse key={index}>{part.text}</MessageResponse>
+                        ) : part.type === "file" ? (
+                          <p key={index} className="text-xs text-muted-foreground">
+                            📎 {part.filename ?? part.mediaType}
+                          </p>
                         ) : null,
                       )}
                     </MessageContent>
@@ -134,18 +189,59 @@ function Chat() {
               onChange={(event) => setChatDraft(event.target.value)}
               placeholder="Ask about planning, writing, research or decisions…"
             />
+            {files.length ? (
+              <ul className="flex flex-wrap gap-2 px-3 pt-2">
+                {files.map((file) => (
+                  <li
+                    key={file.id}
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs"
+                  >
+                    <span className="max-w-40 truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${file.name}`}
+                      className="text-muted-foreground transition-colors hover:text-destructive"
+                      onClick={() => setFiles((prev) => prev.filter((item) => item.id !== file.id))}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <PromptInputFooter className="justify-between">
               <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={CHAT_ACCEPTED}
+                  className="sr-only"
+                  aria-label="Attach files"
+                  onChange={(event) => void addFiles(event.target.files)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Attach files"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Paperclip />
+                </Button>
                 <VoiceInputButton state={voice.state} onToggle={voice.toggle} />
                 <span className="text-xs text-muted-foreground">
                   {voice.state === "recording"
                     ? "Recording…"
                     : voice.state === "transcribing"
                       ? "Transcribing…"
-                      : "Speak your message"}
+                      : "Speak or attach files"}
                 </span>
               </div>
-              <PromptInputSubmit status={status} disabled={!chatDraft.trim() && !isBusy} />
+              <PromptInputSubmit
+                status={status}
+                disabled={!chatDraft.trim() && files.length === 0 && !isBusy}
+              />
             </PromptInputFooter>
           </PromptInput>
 

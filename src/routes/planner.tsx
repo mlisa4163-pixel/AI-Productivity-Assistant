@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation } from "@tanstack/react-query";
-import { Plus, Sparkle, Trash2 } from "lucide-react";
+import { Bell, BellOff, Plus, Sparkle, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AiDisclaimer } from "@/components/ai-disclaimer";
@@ -18,8 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useTaskReminders } from "@/hooks/use-task-reminders";
 import { generateSchedule } from "@/lib/assistant.functions";
-import { newId, useSession, type Priority } from "@/lib/session-store";
+import { newId, useSession, type MeetingMode, type Priority } from "@/lib/session-store";
 
 export const Route = createFileRoute("/planner")({
   head: () => ({
@@ -41,6 +42,16 @@ export const Route = createFileRoute("/planner")({
 });
 
 const PRIORITIES: Priority[] = ["High", "Medium", "Low"];
+const MODES: MeetingMode[] = ["Online", "Face to face"];
+const DURATIONS = [15, 30, 45, 60, 90, 120];
+const REMINDERS = [
+  { value: 0, label: "No reminder" },
+  { value: 5, label: "5 min before" },
+  { value: 10, label: "10 min before" },
+  { value: 15, label: "15 min before" },
+  { value: 30, label: "30 min before" },
+  { value: 60, label: "1 hour before" },
+];
 
 function priorityClasses(priority: Priority) {
   if (priority === "High") return "bg-destructive/10 text-destructive border-destructive/20";
@@ -54,7 +65,13 @@ function Planner() {
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<Priority>("Medium");
   const [deadline, setDeadline] = useState("");
+  const [time, setTime] = useState("");
+  const [duration, setDuration] = useState(60);
+  const [mode, setMode] = useState<MeetingMode>("Online");
+  const [reminder, setReminder] = useState(15);
   const [range, setRange] = useState<"daily" | "weekly">("daily");
+
+  const reminders = useTaskReminders(tasks);
 
   const runGenerate = useServerFn(generateSchedule);
   const mutation = useMutation({
@@ -67,6 +84,9 @@ function Planner() {
             title: task.title,
             priority: task.priority,
             deadline: task.deadline,
+            time: task.time,
+            duration: task.duration,
+            mode: task.mode,
           })),
         },
       }),
@@ -80,6 +100,10 @@ function Planner() {
           priority: (PRIORITIES.includes(block.priority as Priority)
             ? block.priority
             : "Medium") as Priority,
+          duration: Number.isFinite(block.duration) ? Math.round(block.duration) : 60,
+          mode: (MODES.includes(block.mode as MeetingMode)
+            ? block.mode
+            : "Online") as MeetingMode,
           notes: block.notes,
         })),
       );
@@ -88,9 +112,13 @@ function Planner() {
 
   const addTask = () => {
     if (!title.trim()) return;
-    setTasks((prev) => [...prev, { id: newId(), title: title.trim(), priority, deadline }]);
+    setTasks((prev) => [
+      ...prev,
+      { id: newId(), title: title.trim(), priority, deadline, time, duration, mode, reminder },
+    ]);
     setTitle("");
     setDeadline("");
+    setTime("");
     setPriority("Medium");
   };
 
@@ -100,11 +128,14 @@ function Planner() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Add a task</CardTitle>
-            <CardDescription>Title, priority and an optional deadline.</CardDescription>
+            <CardDescription>
+              Title, priority, date and time, how long it takes, whether it is online or face to
+              face, and when to be reminded.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form
-              className="grid gap-3 sm:grid-cols-[1fr_9rem_10rem_auto]"
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 addTask();
@@ -143,9 +174,69 @@ function Planner() {
                   onChange={(event) => setDeadline(event.target.value)}
                 />
               </div>
-              <div className="flex items-end">
+              <div className="space-y-1.5">
+                <Label htmlFor="task-time">Start time</Label>
+                <Input
+                  id="task-time"
+                  type="time"
+                  value={time}
+                  onChange={(event) => setTime(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-duration">Duration</Label>
+                <Select
+                  value={String(duration)}
+                  onValueChange={(value) => setDuration(Number(value))}
+                >
+                  <SelectTrigger id="task-duration">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DURATIONS.map((item) => (
+                      <SelectItem key={item} value={String(item)}>
+                        {item} min
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-mode">Format</Label>
+                <Select value={mode} onValueChange={(value) => setMode(value as MeetingMode)}>
+                  <SelectTrigger id="task-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODES.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-reminder">Reminder</Label>
+                <Select
+                  value={String(reminder)}
+                  onValueChange={(value) => setReminder(Number(value))}
+                >
+                  <SelectTrigger id="task-reminder">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REMINDERS.map((item) => (
+                      <SelectItem key={item.value} value={String(item.value)}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end lg:col-span-4">
                 <Button type="submit" className="w-full sm:w-auto">
-                  <Plus /> Add
+                  <Plus /> Add task
                 </Button>
               </div>
             </form>
@@ -176,7 +267,47 @@ function Planner() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
+              {reminders.permission === "granted" ? (
+                <>
+                  <Bell className="size-4 text-success" />
+                  <span>
+                    Reminders on — {reminders.scheduledCount} upcoming. They only work while this
+                    tab stays open.
+                  </span>
+                </>
+              ) : reminders.permission === "unsupported" ? (
+                <>
+                  <BellOff className="size-4" />
+                  <span>Reminders are not supported in this browser.</span>
+                </>
+              ) : reminders.permission === "denied" ? (
+                <>
+                  <BellOff className="size-4" />
+                  <span>
+                    Notifications are blocked. Allow them in your browser settings to get reminders.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Bell className="size-4" />
+                  <span>Turn on notifications to be reminded before a task starts.</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void reminders.requestPermission()}
+                  >
+                    Enable reminders
+                  </Button>
+                </>
+              )}
+            </div>
+            {reminders.lastFired ? (
+              <p className="rounded-lg border border-border bg-card px-3 py-2 text-xs">
+                Latest reminder: {reminders.lastFired}
+              </p>
+            ) : null}
             {tasks.length === 0 ? (
               <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                 No tasks yet. Add a few above to generate a schedule.
@@ -240,6 +371,83 @@ function Planner() {
                     >
                       <Trash2 />
                     </Button>
+                    <div className="grid gap-2 sm:col-span-4 sm:grid-cols-4">
+                      <Input
+                        type="time"
+                        aria-label="Task start time"
+                        value={task.time}
+                        onChange={(event) =>
+                          setTasks((prev) =>
+                            prev.map((item) =>
+                              item.id === task.id ? { ...item, time: event.target.value } : item,
+                            ),
+                          )
+                        }
+                      />
+                      <Select
+                        value={String(task.duration)}
+                        onValueChange={(value) =>
+                          setTasks((prev) =>
+                            prev.map((item) =>
+                              item.id === task.id ? { ...item, duration: Number(value) } : item,
+                            ),
+                          )
+                        }
+                      >
+                        <SelectTrigger aria-label="Task duration">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DURATIONS.map((item) => (
+                            <SelectItem key={item} value={String(item)}>
+                              {item} min
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={task.mode}
+                        onValueChange={(value) =>
+                          setTasks((prev) =>
+                            prev.map((item) =>
+                              item.id === task.id ? { ...item, mode: value as MeetingMode } : item,
+                            ),
+                          )
+                        }
+                      >
+                        <SelectTrigger aria-label="Task format">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MODES.map((item) => (
+                            <SelectItem key={item} value={item}>
+                              {item}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={String(task.reminder)}
+                        onValueChange={(value) =>
+                          setTasks((prev) =>
+                            prev.map((item) =>
+                              item.id === task.id ? { ...item, reminder: Number(value) } : item,
+                            ),
+                          )
+                        }
+                      >
+                        <SelectTrigger aria-label="Task reminder">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REMINDERS.map((item) => (
+                            <SelectItem key={item.value} value={String(item.value)}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -271,7 +479,7 @@ function Planner() {
             <CardContent className="space-y-3">
               {schedule.map((block) => (
                 <div key={block.id} className="rounded-lg border border-border bg-surface p-3">
-                  <div className="grid gap-2 sm:grid-cols-[10rem_1fr_8rem_auto]">
+                  <div className="grid gap-2 sm:grid-cols-[9rem_1fr_7rem_7rem_9rem_auto]">
                     <Input
                       aria-label="Time"
                       value={block.time}
@@ -318,6 +526,48 @@ function Planner() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Select
+                      value={String(block.duration)}
+                      onValueChange={(value) =>
+                        setSchedule((prev) =>
+                          prev.map((item) =>
+                            item.id === block.id ? { ...item, duration: Number(value) } : item,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger aria-label="Block duration">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DURATIONS.map((item) => (
+                          <SelectItem key={item} value={String(item)}>
+                            {item} min
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={block.mode}
+                      onValueChange={(value) =>
+                        setSchedule((prev) =>
+                          prev.map((item) =>
+                            item.id === block.id ? { ...item, mode: value as MeetingMode } : item,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger aria-label="Block format">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MODES.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -348,7 +598,15 @@ function Planner() {
                 onClick={() =>
                   setSchedule((prev) => [
                     ...prev,
-                    { id: newId(), time: "", activity: "", priority: "Medium", notes: "" },
+                    {
+                      id: newId(),
+                      time: "",
+                      activity: "",
+                      priority: "Medium",
+                      duration: 60,
+                      mode: "Online",
+                      notes: "",
+                    },
                   ])
                 }
               >
